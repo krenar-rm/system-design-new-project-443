@@ -4,6 +4,12 @@ import { check } from 'k6';
 const profile = JSON.parse(open('./profile.json'));
 const targetUrl = __ENV.TARGET_URL ?? 'http://nginx:8080';
 
+// Под перегрузкой ответ упирается в потолок балансировщика: 5 с на экземпляр,
+// два экземпляра. Итерация держит VU до десяти секунд, отсюда и запас в
+// rate x VU_SECONDS. Если VU не хватит, k6 отбросит часть итераций, и замер
+// будет снят не с той нагрузки, которая объявлена в профиле.
+const VU_SECONDS = 12;
+
 const scenario = (name: string, rate: number, startTime: string) => ({
   executor: 'constant-arrival-rate',
   exec: name,
@@ -11,8 +17,11 @@ const scenario = (name: string, rate: number, startTime: string) => ({
   timeUnit: '1s',
   duration: profile.stand.duration,
   startTime,
-  preAllocatedVUs: 20,
-  maxVUs: 150,
+  // Пул выделяется целиком заранее. k6 отбрасывает итерацию сразу, если
+  // свободного VU нет в этот момент, а доращивает пул уже потом, и за 30 секунд
+  // прогона не успевает.
+  preAllocatedVUs: Math.ceil(rate * VU_SECONDS),
+  maxVUs: Math.ceil(rate * VU_SECONDS) + 50,
   gracefulStop: '5s',
 });
 
@@ -24,8 +33,8 @@ export const options = {
       rate: 5,
       timeUnit: '1s',
       duration: profile.stand.warmup,
-      preAllocatedVUs: 5,
-      maxVUs: 30,
+      preAllocatedVUs: 60,
+      maxVUs: 110,
     },
     orders: scenario('order', profile.stand.orderRate, profile.stand.warmup),
     reads: scenario('read', profile.stand.readRate, profile.stand.warmup),
