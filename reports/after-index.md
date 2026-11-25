@@ -21,7 +21,7 @@
 сценарий `order`, это 0,015 % набора. Решение в
 [design/adr/010-history-index.md](design/adr/010-history-index.md).
 
-## Что получилось
+## Итоги прогона
 
 Полные числа в `reports/after-index.json`.
 
